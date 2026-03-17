@@ -11,7 +11,7 @@ import logging
 import random
 import re
 import time
-import urllib.request
+import requests as _requests
 from typing import Optional
 
 from .config import Config, get_config
@@ -172,22 +172,25 @@ def _call_llm(
         "Content-Type": "application/json",
     }
 
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(config.llm_endpoint, data=data, headers=headers)
-
     for attempt in range(3):
         try:
-            resp = urllib.request.urlopen(req, timeout=60)
-            result = json.loads(resp.read())
-            return result["choices"][0]["message"]["content"].strip()
-        except urllib.error.HTTPError as exc:
-            if exc.code == 429 and attempt < 2:
+            resp = _requests.post(
+                config.llm_endpoint,
+                headers=headers,
+                json=payload,
+                timeout=60,
+            )
+            if resp.status_code == 429 and attempt < 2:
                 wait = 2 ** attempt * 3
                 log.warning("Rate limited (429), waiting %ds...", wait)
                 time.sleep(wait)
                 continue
-            body = exc.read().decode()[:300]
-            raise RuntimeError(f"LLM API error {exc.code}: {body}") from exc
+            resp.raise_for_status()
+            result = resp.json()
+            return result["choices"][0]["message"]["content"].strip()
+        except _requests.exceptions.HTTPError as exc:
+            body = resp.text[:300] if resp is not None else str(exc)
+            raise RuntimeError(f"LLM API error {resp.status_code}: {body}") from exc
         except Exception as exc:
             if attempt < 2:
                 time.sleep(2 ** attempt)
@@ -217,20 +220,23 @@ def _call_anthropic(
         "Content-Type": "application/json",
     }
 
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(config.llm_endpoint, data=data, headers=headers)
-
     for attempt in range(3):
         try:
-            resp = urllib.request.urlopen(req, timeout=60)
-            result = json.loads(resp.read())
-            return result["content"][0]["text"].strip()
-        except urllib.error.HTTPError as exc:
-            if exc.code == 429 and attempt < 2:
+            resp = _requests.post(
+                config.llm_endpoint,
+                headers=headers,
+                json=payload,
+                timeout=60,
+            )
+            if resp.status_code == 429 and attempt < 2:
                 time.sleep(2 ** attempt * 3)
                 continue
-            body = exc.read().decode()[:300]
-            raise RuntimeError(f"Anthropic API error {exc.code}: {body}") from exc
+            resp.raise_for_status()
+            result = resp.json()
+            return result["content"][0]["text"].strip()
+        except _requests.exceptions.HTTPError as exc:
+            body = resp.text[:300] if resp is not None else str(exc)
+            raise RuntimeError(f"Anthropic API error {resp.status_code}: {body}") from exc
         except Exception as exc:
             if attempt < 2:
                 time.sleep(2 ** attempt)
