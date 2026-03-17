@@ -160,7 +160,7 @@ def generate_image(
         "fal-ai/flux/schnell",
         arguments={
             "prompt": enhanced,
-            "image_size": {"width": 768, "height": 1344},
+            "image_size": {"width": 1080, "height": 1920},
             "num_images": 1,
             "num_inference_steps": 4,
             "enable_safety_checker": False,
@@ -209,28 +209,36 @@ def image_to_clip(
 
     effect = random.choice(["zoom_in", "zoom_out", "pan_right", "pan_left"])
 
+    # Work at 2x resolution internally for smooth sub-pixel movement,
+    # then downscale to 1080x1920 at the end.
+    canvas_w, canvas_h = 2160, 3840
+
+    # Slow, smooth movements — smaller increments prevent jitter
+    zoom_step = 0.0005  # very gradual zoom
+    pan_step = 1        # 1px at 2x res = 0.5px at output
+
     zoompan_filters = {
         "zoom_in": (
-            f"zoompan=z='min(zoom+0.001,1.15)'"
+            f"zoompan=z='min(zoom+{zoom_step},1.12)'"
             f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-            f":d={total_frames}:s=1080x1920:fps={fps}"
+            f":d={total_frames}:s={canvas_w}x{canvas_h}:fps={fps}"
         ),
         "zoom_out": (
-            f"zoompan=z='if(eq(on,1),1.15,max(zoom-0.001,1.0))'"
+            f"zoompan=z='if(eq(on,1),1.12,max(zoom-{zoom_step},1.0))'"
             f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-            f":d={total_frames}:s=1080x1920:fps={fps}"
+            f":d={total_frames}:s={canvas_w}x{canvas_h}:fps={fps}"
         ),
         "pan_right": (
-            f"zoompan=z='1.1'"
-            f":x='if(eq(on,1),0,min(x+2,iw-iw/zoom))'"
+            f"zoompan=z='1.08'"
+            f":x='if(eq(on,1),0,min(x+{pan_step},iw-iw/zoom))'"
             f":y='ih/2-(ih/zoom/2)'"
-            f":d={total_frames}:s=1080x1920:fps={fps}"
+            f":d={total_frames}:s={canvas_w}x{canvas_h}:fps={fps}"
         ),
         "pan_left": (
-            f"zoompan=z='1.1'"
-            f":x='if(eq(on,1),iw-iw/zoom,max(x-2,0))'"
+            f"zoompan=z='1.08'"
+            f":x='if(eq(on,1),iw-iw/zoom,max(x-{pan_step},0))'"
             f":y='ih/2-(ih/zoom/2)'"
-            f":d={total_frames}:s=1080x1920:fps={fps}"
+            f":d={total_frames}:s={canvas_w}x{canvas_h}:fps={fps}"
         ),
     }
 
@@ -238,17 +246,20 @@ def image_to_clip(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Upscale image first for clean zoompan, then downscale to 1080x1920
+    vf = f"scale=2160:3840:flags=lanczos,{zoompan},scale=1080:1920:flags=lanczos"
+
     cmd = [
-        "ffmpeg", "-y",
+        "nice", "-n", "15", "ffmpeg", "-y",
         "-loop", "1", "-i", str(image_path),
-        "-vf", zoompan,
+        "-vf", vf,
         "-t", str(duration),
         "-c:v", "libx264", "-pix_fmt", "yuv420p",
-        "-preset", "fast", "-crf", "23",
+        "-preset", "fast", "-crf", "20",
         str(output_path),
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg zoompan failed: {result.stderr[-500:]}")
 
