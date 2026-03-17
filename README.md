@@ -7,6 +7,14 @@
 
 ---
 
+<p align="center">
+  <img src="https://github.com/DarkPancakes/clipforge/releases/download/v0.1.0/preview.gif" alt="ClipForge Demo" width="270">
+  <br>
+  <em>Generated in 60 seconds with a single command — <a href="https://github.com/DarkPancakes/clipforge/releases/download/v0.1.0/demo_lightning.mp4">watch full demo</a></em>
+</p>
+
+---
+
 ## What it does
 
 Give ClipForge a topic. It writes a script, generates cinematic AI visuals, narrates with a natural voice, adds word-by-word animated subtitles, and renders a ready-to-upload short — in under 2 minutes.
