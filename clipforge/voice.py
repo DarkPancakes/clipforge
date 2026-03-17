@@ -43,7 +43,7 @@ async def _generate_tts(
     Returns:
         List of word timing dicts with text, start (seconds), duration (seconds).
     """
-    comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+    comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, boundary="WordBoundary")
     word_timings: list[WordTiming] = []
 
     output_path = Path(output_path)
